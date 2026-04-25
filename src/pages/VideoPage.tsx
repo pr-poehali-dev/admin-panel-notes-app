@@ -1,157 +1,246 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Icon from "@/components/ui/icon";
 
-const videos = [
-  { id: 1, title: "CYBERPUNK 2077 - Полное прохождение #1", channel: "NeoGamer_RU", views: "1.2M", duration: "3:42:18", platform: "yt", emoji: "🎮", color: "var(--neon-cyan)", hot: true },
-  { id: 2, title: "Новый чит-код обнаружен | Speedrun WR", channel: "SpeedDemon", views: "892K", duration: "24:05", platform: "yt", emoji: "⚡", color: "var(--neon-green)", hot: true },
-  { id: 3, title: "Топ 10 нереальных фрагов этой недели", channel: "FragHighlights", views: "445K", duration: "12:30", platform: "tt", emoji: "🔥", color: "var(--neon-pink)", hot: false },
-  { id: 4, title: "ИИ играет в Doom — результаты шокируют", channel: "TechVerse", views: "2.1M", duration: "18:44", platform: "yt", emoji: "🤖", color: "var(--neon-purple)", hot: true },
-  { id: 5, title: "Живой стрим — открываем кейсы 24 часа", channel: "CaseKingdom", views: "320K", duration: "Live", platform: "tt", emoji: "📦", color: "var(--neon-orange)", hot: false },
-  { id: 6, title: "Секреты GTA 6 которые никто не заметил", channel: "LorehunterX", views: "5.8M", duration: "31:12", platform: "yt", emoji: "🕵️", color: "var(--neon-cyan)", hot: true },
+const YOUTUBE_URL = "https://functions.poehali.dev/590cfc0d-3ea2-497c-96a6-ad22e4d253fc";
+
+interface Video {
+  id: string;
+  title: string;
+  channel: string;
+  thumbnail: string;
+  publishedAt: string;
+  viewCount: number;
+  url: string;
+  embedUrl: string;
+}
+
+const categories = [
+  { label: "Популярные", q: "" },
+  { label: "Игры", q: "gaming trending" },
+  { label: "Музыка", q: "music hits 2024" },
+  { label: "Технологии", q: "tech gadgets 2024" },
+  { label: "Мемы", q: "funny memes compilation" },
 ];
 
-const categories = ["Все", "YouTube", "TikTok", "Горящие", "Сохранённые"];
+function formatViews(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
 
 export default function VideoPage() {
-  const [activeCategory, setActiveCategory] = useState("Все");
-  const [playing, setPlaying] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState(0);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [playing, setPlaying] = useState<Video | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
 
-  const filtered = videos.filter((v) => {
-    if (activeCategory === "YouTube") return v.platform === "yt";
-    if (activeCategory === "TikTok") return v.platform === "tt";
-    if (activeCategory === "Горящие") return v.hot;
-    return true;
-  });
+  const fetchVideos = async (q: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const params = q ? `?q=${encodeURIComponent(q)}&maxResults=12` : "?maxResults=12";
+      const res = await fetch(YOUTUBE_URL + params);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setVideos(data.videos || []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка загрузки");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos(categories[activeCategory].q);
+  }, [activeCategory]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchInput.trim()) return;
+    setSearch(searchInput);
+    fetchVideos(searchInput);
+  };
 
   return (
     <div className="space-y-5">
+      {/* Search */}
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <div className="panel rounded flex items-center gap-2 px-3 flex-1">
+          <Icon name="Search" size={14} className="text-[rgba(0,255,255,0.4)] flex-shrink-0" />
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="ПОИСК ВИДЕО НА YOUTUBE..."
+            className="flex-1 bg-transparent font-mono text-xs text-[var(--neon-cyan)] placeholder-[rgba(0,255,255,0.25)] outline-none py-2.5 tracking-wider"
+          />
+        </div>
+        <button
+          type="submit"
+          className="px-4 py-2 rounded font-rajdhani text-sm font-semibold tracking-wider transition-all"
+          style={{ border: "1px solid var(--neon-cyan)", color: "var(--neon-cyan)", background: "rgba(0,255,255,0.08)" }}
+        >
+          Найти
+        </button>
+      </form>
+
       {/* Categories */}
-      <div className="flex items-center gap-3">
-        {categories.map((cat) => (
+      <div className="flex items-center gap-2 flex-wrap">
+        {categories.map((cat, i) => (
           <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
+            key={i}
+            onClick={() => { setActiveCategory(i); setSearch(""); setSearchInput(""); }}
             className="font-rajdhani text-sm font-semibold px-4 py-2 rounded tracking-wider transition-all duration-150"
             style={{
-              border: activeCategory === cat ? "1px solid var(--neon-orange)" : "1px solid rgba(255,255,255,0.1)",
-              color: activeCategory === cat ? "var(--neon-orange)" : "rgba(255,255,255,0.35)",
-              background: activeCategory === cat ? "rgba(255,102,0,0.08)" : "transparent",
+              border: activeCategory === i && !search ? "1px solid var(--neon-orange)" : "1px solid rgba(255,255,255,0.1)",
+              color: activeCategory === i && !search ? "var(--neon-orange)" : "rgba(255,255,255,0.35)",
+              background: activeCategory === i && !search ? "rgba(255,102,0,0.08)" : "transparent",
             }}
           >
-            {cat}
+            {cat.label}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2">
-          <button className="p-2 rounded border border-[rgba(0,255,255,0.15)] text-[rgba(0,255,255,0.5)] hover:text-[var(--neon-cyan)] hover:border-[var(--neon-cyan)] transition-all">
-            <Icon name="Search" size={14} />
-          </button>
-          <button className="p-2 rounded border border-[rgba(0,255,255,0.15)] text-[rgba(0,255,255,0.5)] hover:text-[var(--neon-cyan)] hover:border-[var(--neon-cyan)] transition-all">
-            <Icon name="SlidersHorizontal" size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Featured */}
-      {playing !== null ? (
-        <div className="panel rounded-lg overflow-hidden">
-          <div
-            className="h-64 flex items-center justify-center relative"
-            style={{ background: `linear-gradient(135deg, ${videos.find(v=>v.id===playing)?.color}20, rgba(0,0,0,0.8))` }}
-          >
-            <div className="text-center">
-              <div className="text-6xl mb-3">{videos.find((v) => v.id === playing)?.emoji}</div>
-              <div className="font-orbitron text-sm font-bold text-white mb-2">{videos.find((v) => v.id === playing)?.title}</div>
-              <div className="font-mono text-xs text-[rgba(0,255,255,0.5)]">EMBED PLAYER // Подключите реальный URL</div>
-            </div>
+        {search && (
+          <div className="flex items-center gap-3 ml-2">
+            <span className="font-mono text-xs text-[rgba(0,255,255,0.5)]">
+              Поиск: <span className="text-[var(--neon-cyan)]">«{search}»</span>
+            </span>
             <button
-              onClick={() => setPlaying(null)}
-              className="absolute top-3 right-3 p-1.5 rounded border border-[rgba(255,255,255,0.2)] text-[rgba(255,255,255,0.5)] hover:text-white transition-all"
+              onClick={() => { setSearch(""); setSearchInput(""); fetchVideos(categories[activeCategory].q); }}
+              className="flex items-center gap-1 font-mono text-[11px] px-3 py-1.5 rounded border border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:text-white transition-all"
             >
-              <Icon name="X" size={14} />
+              <Icon name="X" size={11} /> Сбросить
             </button>
-            {/* Progress bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[rgba(0,255,255,0.1)]">
-              <div className="h-full w-1/3 bg-[var(--neon-orange)]" style={{ boxShadow: "0 0 6px var(--neon-orange)" }} />
+          </div>
+        )}
+      </div>
+
+      {/* Player */}
+      {playing && (
+        <div className="panel rounded-lg overflow-hidden">
+          <div className="relative" style={{ paddingTop: "40%" }}>
+            <iframe
+              src={`${playing.embedUrl}?autoplay=1`}
+              className="absolute inset-0 w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between border-t border-[rgba(0,255,255,0.1)]">
+            <div>
+              <div className="font-rajdhani text-sm font-semibold text-white">{playing.title}</div>
+              <div className="font-mono text-[10px] text-[rgba(0,255,255,0.4)] mt-0.5">{playing.channel}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={playing.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded font-rajdhani text-xs font-semibold tracking-wider"
+                style={{ border: "1px solid rgba(255,0,0,0.4)", color: "rgb(255,80,80)", background: "rgba(255,0,0,0.08)" }}
+              >
+                <Icon name="ExternalLink" size={11} /> YouTube
+              </a>
+              <button
+                onClick={() => setPlaying(null)}
+                className="p-1.5 rounded border border-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.4)] hover:text-white transition-all"
+              >
+                <Icon name="X" size={14} />
+              </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 gap-4">
-        {filtered.map((v, i) => (
-          <div
-            key={v.id}
-            className="panel rounded-lg overflow-hidden group cursor-pointer animate-fade-in-up"
-            style={{ animationDelay: `${i * 0.06}s` }}
-            onClick={() => setPlaying(v.id)}
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="grid grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="panel rounded-lg overflow-hidden">
+              <div className="h-36 bg-[rgba(0,255,255,0.04)] animate-pulse" />
+              <div className="p-3 space-y-2">
+                <div className="h-3 bg-[rgba(0,255,255,0.06)] rounded w-3/4 animate-pulse" />
+                <div className="h-2 bg-[rgba(0,255,255,0.04)] rounded w-1/2 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && !loading && (
+        <div className="panel rounded-lg p-6 text-center" style={{ borderColor: "rgba(255,0,170,0.3)" }}>
+          <Icon name="AlertTriangle" size={32} className="mx-auto mb-3 text-[var(--neon-pink)]" />
+          <div className="font-orbitron text-sm text-[var(--neon-pink)] mb-1">ОШИБКА ЗАГРУЗКИ</div>
+          <div className="font-mono text-xs text-[rgba(255,255,255,0.4)] mb-4">{error}</div>
+          <button
+            onClick={() => fetchVideos(search || categories[activeCategory].q)}
+            className="font-rajdhani text-sm font-semibold px-4 py-2 rounded border border-[rgba(0,255,255,0.3)] text-[var(--neon-cyan)] hover:bg-[rgba(0,255,255,0.08)] transition-all tracking-wider"
           >
-            {/* Thumbnail */}
+            Повторить
+          </button>
+        </div>
+      )}
+
+      {/* Videos Grid */}
+      {!loading && !error && (
+        <div className="grid grid-cols-3 gap-4">
+          {videos.map((v, i) => (
             <div
-              className="h-36 flex items-center justify-center relative border-b border-[rgba(0,255,255,0.08)]"
-              style={{ background: `linear-gradient(135deg, ${v.color}10, rgba(0,0,0,0.6))` }}
+              key={v.id}
+              className="panel rounded-lg overflow-hidden group cursor-pointer animate-fade-in-up"
+              style={{ animationDelay: `${i * 0.04}s` }}
+              onClick={() => setPlaying(v)}
             >
-              <div className="text-5xl group-hover:scale-110 transition-transform duration-300">{v.emoji}</div>
-
-              {/* Platform badge */}
-              <div
-                className="absolute top-2 left-2 font-mono text-[10px] px-2 py-0.5 rounded tracking-widest font-bold"
-                style={{
-                  background: v.platform === "yt" ? "rgba(255,0,0,0.7)" : "rgba(0,0,0,0.7)",
-                  color: "white",
-                  border: v.platform === "yt" ? "1px solid rgba(255,0,0,0.5)" : "1px solid rgba(255,255,255,0.2)",
-                }}
-              >
-                {v.platform === "yt" ? "▶ YT" : "♪ TT"}
-              </div>
-
-              {/* Duration */}
-              <div
-                className="absolute bottom-2 right-2 font-mono text-[10px] px-2 py-0.5 rounded"
-                style={{
-                  background: "rgba(0,0,0,0.7)",
-                  color: v.duration === "Live" ? "var(--neon-pink)" : "white",
-                  border: v.duration === "Live" ? "1px solid var(--neon-pink)" : "none",
-                }}
-              >
-                {v.duration === "Live" ? "● LIVE" : v.duration}
-              </div>
-
-              {/* Hot badge */}
-              {v.hot && (
+              {/* Thumbnail */}
+              <div className="relative h-36 overflow-hidden bg-[rgba(0,0,0,0.5)]">
+                <img
+                  src={v.thumbnail}
+                  alt={v.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60" />
                 <div
-                  className="absolute top-2 right-2 font-mono text-[10px] px-2 py-0.5 rounded"
-                  style={{ background: "rgba(255,102,0,0.3)", color: "var(--neon-orange)", border: "1px solid rgba(255,102,0,0.4)" }}
+                  className="absolute top-2 left-2 font-mono text-[10px] px-2 py-0.5 rounded font-bold"
+                  style={{ background: "rgba(255,0,0,0.75)", color: "white" }}
                 >
-                  🔥 ХИТ
+                  ▶ YT
                 </div>
-              )}
-
-              {/* Play overlay */}
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
-                <div
-                  className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity scale-75 group-hover:scale-100 duration-200"
-                  style={{ background: "rgba(255,255,255,0.2)" }}
-                >
-                  <Icon name="Play" size={16} className="text-white ml-0.5" />
+                {v.viewCount > 0 && (
+                  <div className="absolute bottom-2 right-2 flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded" style={{ background: "rgba(0,0,0,0.7)", color: "white" }}>
+                    <Icon name="Eye" size={10} />
+                    {formatViews(v.viewCount)}
+                  </div>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div
+                    className="w-12 h-12 rounded-full border-2 border-white flex items-center justify-center scale-75 group-hover:scale-100 transition-transform duration-200"
+                    style={{ background: "rgba(255,0,0,0.7)" }}
+                  >
+                    <Icon name="Play" size={18} className="text-white ml-1" />
+                  </div>
+                </div>
+              </div>
+              {/* Info */}
+              <div className="p-3">
+                <div className="font-rajdhani text-sm font-semibold text-white leading-tight line-clamp-2 mb-2">{v.title}</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-[rgba(0,255,255,0.5)] truncate max-w-[140px]">{v.channel}</span>
+                  <span className="font-mono text-[10px] text-[rgba(255,255,255,0.25)] flex-shrink-0">{v.publishedAt}</span>
                 </div>
               </div>
             </div>
+          ))}
 
-            {/* Meta */}
-            <div className="p-3">
-              <div className="font-rajdhani text-sm font-semibold text-white mb-1 leading-tight line-clamp-2">{v.title}</div>
-              <div className="flex items-center justify-between mt-2">
-                <span className="font-mono text-[10px] text-[rgba(0,255,255,0.5)]">{v.channel}</span>
-                <div className="flex items-center gap-1 text-[rgba(255,255,255,0.3)]">
-                  <Icon name="Eye" size={11} />
-                  <span className="font-mono text-[10px]">{v.views}</span>
-                </div>
-              </div>
+          {videos.length === 0 && (
+            <div className="col-span-3 panel rounded-lg p-10 text-center">
+              <div className="font-orbitron text-sm text-[rgba(0,255,255,0.3)] tracking-widest">ВИДЕО НЕ НАЙДЕНЫ</div>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
